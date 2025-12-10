@@ -1,0 +1,7 @@
+{
+  "name": "OmniTranslate AI",
+  "description": "Next-gen real-time bidirectional AI translator with iOS 26 aesthetics.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
