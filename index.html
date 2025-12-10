@@ -15,6 +15,12 @@
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/10850/10850239.png">
 
     <title>OmniTranslate AI</title>
+    
+    <!-- Polyfill for process.env to prevent crashes on Vercel/iOS before React loads -->
+    <script>
+      window.process = { env: {} };
+    </script>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -77,5 +83,7 @@
 </head>
   <body>
     <div id="root"></div>
+    <!-- Entry point for Vite/React -->
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>
