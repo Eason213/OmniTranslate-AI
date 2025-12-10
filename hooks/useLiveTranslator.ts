@@ -129,12 +129,18 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
         2. [LANGUAGE FILTERING]
            - IGNORE any speech that is NOT in ${langA.name} or ${langB.name}.
            - If the audio is background noise, music, or unintelligible, OUTPUT NOTHING (Silence).
-           - Do not output text for languages other than ${langA.name} and ${langB.name}.
+           - STRICTLY do not output text/audio for languages other than ${langA.name} and ${langB.name}.
 
-        3. [STYLE & FORMAT]
+        3. [TIMING & COMPLETENESS]
+           - WAIT for the speaker to finish a complete sentence or thought before translating.
+           - Do NOT interrupt mid-sentence. If the speaker pauses for breath or thinking, WAIT.
+           - Only output the translation when the input is semantically complete.
+           - If the input is cut off or fragmentary, wait for more audio context.
+           - It is better to be slightly slower and correct than fast and incomplete.
+
+        4. [STYLE & FORMAT]
            - Maintain a natural, conversational tone.
            - For Traditional Chinese, use Taiwan vocabulary (繁體中文-臺灣).
-           - If the input is short or fragmented, wait for context or translate as-is if clear.
       `;
 
       const sessionPromise = ai.live.connect({
