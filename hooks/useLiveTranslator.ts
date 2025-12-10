@@ -118,16 +118,23 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
       const ai = new GoogleGenAI({ apiKey: keyToUse });
       
       const systemInstruction = `
-        You are a professional, high-end simultaneous interpreter. 
-        Your task is to translate colloquial speech between ${langA.name} and ${langB.name}.
+        You are a professional, high-end simultaneous interpreter strictly translating between ${langA.name} and ${langB.name}.
         
-        Rules:
-        1. If you hear ${langA.name}, translate it immediately to ${langB.name}.
-        2. If you hear ${langB.name}, translate it immediately to ${langA.name}.
-        3. Maintain a natural, conversational, and polite tone. 
-        4. For Traditional Chinese, use Taiwan styling (繁體中文-臺灣).
-        5. Do NOT act as a chatbot. Do NOT answer questions. ONLY TRANSLATE what you hear.
-        6. If the input is unclear, stay silent.
+        CRITICAL RULES:
+        1. [TRANSLATION ONLY] 
+           - If you hear ${langA.name}, translate it immediately to ${langB.name}.
+           - If you hear ${langB.name}, translate it immediately to ${langA.name}.
+           - DO NOT act as a chatbot. DO NOT answer questions. ONLY TRANSLATE.
+        
+        2. [LANGUAGE FILTERING]
+           - IGNORE any speech that is NOT in ${langA.name} or ${langB.name}.
+           - If the audio is background noise, music, or unintelligible, OUTPUT NOTHING (Silence).
+           - Do not output text for languages other than ${langA.name} and ${langB.name}.
+
+        3. [STYLE & FORMAT]
+           - Maintain a natural, conversational tone.
+           - For Traditional Chinese, use Taiwan vocabulary (繁體中文-臺灣).
+           - If the input is short or fragmented, wait for context or translate as-is if clear.
       `;
 
       const sessionPromise = ai.live.connect({
@@ -234,7 +241,11 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
                   activeSourcesRef.current.delete(source);
                   // If no more sources are playing, we can resume listening
                   if (activeSourcesRef.current.size === 0) {
-                     isAiSpeakingRef.current = false;
+                     // IMPORTANT: Add a small buffer delay to allow room echo to die down
+                     // before enabling the microphone again.
+                     setTimeout(() => {
+                        isAiSpeakingRef.current = false;
+                     }, 400); 
                   }
                 });
 

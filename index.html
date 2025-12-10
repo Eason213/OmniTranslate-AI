@@ -31,11 +31,9 @@
         color: #fff;
         -webkit-font-smoothing: antialiased;
         overscroll-behavior: none;
-        /* Safe area handling for iPhone PWA */
-        padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
-        padding-left: env(safe-area-inset-left);
-        padding-right: env(safe-area-inset-right);
+        /* Safe area handled in App container now */
+        margin: 0;
+        padding: 0;
       }
       /* Hide scrollbar for clean UI */
       ::-webkit-scrollbar {
