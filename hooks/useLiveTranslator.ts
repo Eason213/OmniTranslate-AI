@@ -8,10 +8,11 @@ interface UseLiveTranslatorProps {
   langA: Language;
   langB: Language;
   autoPlay: boolean;
+  apiKey: string; // New prop for dynamic API Key
   onAudioLevelChange?: (level: number) => void;
 }
 
-export const useLiveTranslator = ({ langA, langB, autoPlay, onAudioLevelChange }: UseLiveTranslatorProps) => {
+export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevelChange }: UseLiveTranslatorProps) => {
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.DISCONNECTED);
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -80,8 +81,11 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, onAudioLevelChange }
   }, []);
 
   const connect = useCallback(async () => {
-    if (!process.env.API_KEY) {
-      setError("API Key missing");
+    // Priority: Prop Key -> Env Key
+    const keyToUse = apiKey || (process.env.API_KEY as string);
+
+    if (!keyToUse) {
+      setError("API Key is missing. Please click the Key icon to set it.");
       return;
     }
 
@@ -111,7 +115,7 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, onAudioLevelChange }
       });
       mediaStreamRef.current = stream;
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: keyToUse });
       
       const systemInstruction = `
         You are a professional, high-end simultaneous interpreter. 
@@ -262,7 +266,7 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, onAudioLevelChange }
       setError(err.message || "Failed to connect");
       disconnect();
     }
-  }, [langA, langB, disconnect, onAudioLevelChange]); // Note: autoPlay is not a dependency here, handled via ref
+  }, [langA, langB, apiKey, disconnect, onAudioLevelChange]); // Note: autoPlay is not a dependency here, handled via ref
 
   // Helper to update transcript state intelligently
   const updateLastTranscript = (text: string, isUser: boolean, isFinal: boolean) => {

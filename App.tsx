@@ -5,14 +5,20 @@ import { useLiveTranslator } from './hooks/useLiveTranslator';
 import { LanguageSelector } from './components/LanguageSelector';
 import { Visualizer } from './components/Visualizer';
 import { Toggle } from './components/Toggle';
-import { Mic, Square, ArrowRightLeft, Sparkles, Download } from 'lucide-react';
+import { Mic, Square, ArrowRightLeft, Sparkles, Download, Key, X, ExternalLink } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export default function App() {
   const [langA, setLangA] = useState<Language>(SUPPORTED_LANGUAGES[0]); // Traditional Chinese
   const [langB, setLangB] = useState<Language>(SUPPORTED_LANGUAGES[1]); // English
   const [audioLevel, setAudioLevel] = useState<number>(0);
-  const [autoPlay, setAutoPlay] = useState<boolean>(false); // Default false as requested
+  const [autoPlay, setAutoPlay] = useState<boolean>(false);
+  
+  // API Key State with Persistence
+  const [apiKey, setApiKey] = useState<string>(() => {
+    return localStorage.getItem('GEMINI_API_KEY') || '';
+  });
+  const [showSettings, setShowSettings] = useState<boolean>(false);
   
   // Use a ref for transcripts container auto-scroll
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -21,6 +27,7 @@ export default function App() {
     langA,
     langB,
     autoPlay,
+    apiKey, // Pass the managed key
     onAudioLevelChange: setAudioLevel
   });
 
@@ -34,10 +41,23 @@ export default function App() {
     }
   }, [transcripts]);
 
+  // Check if we need to show settings on first load if no key
+  useEffect(() => {
+    if (!apiKey && !process.env.API_KEY) {
+      // Small delay to make it feel natural
+      const timer = setTimeout(() => setShowSettings(true), 500);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
   const handleToggle = () => {
     if (isConnected || isConnecting) {
       disconnect();
     } else {
+      if (!apiKey && !process.env.API_KEY) {
+        setShowSettings(true);
+        return;
+      }
       connect();
     }
   };
@@ -46,6 +66,12 @@ export default function App() {
     if (isConnected) return; // Disable swap while active
     setLangA(langB);
     setLangB(langA);
+  };
+
+  const saveApiKey = (key: string) => {
+    setApiKey(key);
+    localStorage.setItem('GEMINI_API_KEY', key);
+    setShowSettings(false);
   };
 
   const handleExport = () => {
@@ -64,22 +90,18 @@ export default function App() {
 
     // Build Filename: Date + Languages + Time
     const now = new Date();
-    
-    // Date: YYYY-MM-DD (Using dashes instead of slashes for filesystem compatibility)
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
 
-    // Time: 12-hour format (e.g., 03-30PM)
     let hours = now.getHours();
     const ampm = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
-    hours = hours ? hours : 12; // the hour '0' should be '12'
+    hours = hours ? hours : 12;
     const minutes = String(now.getMinutes()).padStart(2, '0');
     const timeStr = `${hours}-${minutes}${ampm}`;
 
-    // Languages (e.g., 中文-English)
     const langStr = `${langA.label}-${langB.label}`;
 
     link.download = `${dateStr}_${langStr}_${timeStr}.txt`;
@@ -107,11 +129,23 @@ export default function App() {
             </div>
             <span className="font-semibold text-lg tracking-tight">OmniTranslate</span>
           </div>
-          <div className={clsx(
-            "px-3 py-1 rounded-full text-xs font-medium border transition-all",
-            isConnected ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-white/5 border-white/10 text-white/40"
-          )}>
-            {isConnected ? "LIVE" : "READY"}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowSettings(true)}
+              className={clsx(
+                "px-3 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition-all hover:bg-white/10",
+                !apiKey ? "bg-amber-500/10 border-amber-500/40 text-amber-400 animate-pulse" : "bg-white/5 border-white/10 text-white/40"
+              )}
+            >
+              <Key className="w-3 h-3" />
+              {apiKey ? "Key Set" : "Set Key"}
+            </button>
+            <div className={clsx(
+              "px-3 py-1 rounded-full text-xs font-medium border transition-all",
+              isConnected ? "bg-green-500/10 border-green-500/20 text-green-400" : "bg-white/5 border-white/10 text-white/40"
+            )}>
+              {isConnected ? "LIVE" : "READY"}
+            </div>
           </div>
         </div>
         
@@ -175,7 +209,9 @@ export default function App() {
              {transcripts.length === 0 && !isConnected && (
                <div className="h-full flex flex-col items-center justify-center text-white/20 gap-4">
                  <Mic className="w-12 h-12 opacity-20" />
-                 <p className="text-sm font-medium">Tap the microphone to start translating</p>
+                 <p className="text-sm font-medium">
+                    {apiKey ? "Tap microphone to start" : "Set API Key to begin"}
+                 </p>
                </div>
              )}
 
@@ -199,11 +235,10 @@ export default function App() {
              ))}
 
              {isConnected && transcripts.length > 0 && (
-                <div className="h-12" /> /* Spacer for visual breathing room at bottom */
+                <div className="h-12" /> /* Spacer */
              )}
            </div>
            
-           {/* Fade overlay at top */}
            <div className="absolute top-0 left-0 right-0 h-12 bg-gradient-to-b from-black/80 to-transparent pointer-events-none" />
         </div>
 
@@ -225,7 +260,6 @@ export default function App() {
                 : "bg-white text-black hover:scale-105 border-4 border-white/10"
             )}
           >
-            {/* Visualizer Ring (Only when connected) */}
             {isConnected && (
                <div 
                  className="absolute inset-0 rounded-full border-2 border-red-500/50 animate-ping opacity-20"
@@ -233,13 +267,11 @@ export default function App() {
                />
             )}
             
-            {/* Active Glow */}
             <div className={clsx(
               "absolute inset-0 rounded-full blur-xl transition-all duration-500",
               isConnected ? "bg-red-500/30 scale-125" : "bg-white/30 scale-0 opacity-0 group-hover:scale-110 group-hover:opacity-100"
             )} />
 
-            {/* Icon */}
             {isConnected ? (
               <Square className="w-8 h-8 fill-red-500 text-red-500 relative z-10" />
             ) : (
@@ -248,12 +280,69 @@ export default function App() {
           </button>
         </div>
 
-        {/* Visualizer Display (Below button) */}
+        {/* Visualizer */}
         <div className="h-8 flex justify-center items-end">
            <Visualizer level={audioLevel} active={isConnected} />
         </div>
 
       </main>
+
+      {/* Settings Modal (API Key) */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowSettings(false)}
+          />
+          <div className="relative w-full max-w-sm bg-[#161616] border border-white/10 rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 fade-in duration-200">
+            <button 
+              onClick={() => setShowSettings(false)}
+              className="absolute top-4 right-4 text-white/30 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <Key className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">API Key Required</h3>
+                  <p className="text-xs text-white/40">Enter your Gemini API key to continue</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <input
+                  type="password"
+                  placeholder="Paste key here (starts with AIza...)"
+                  className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all placeholder:text-white/20"
+                  defaultValue={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)} // Temporary local state update
+                />
+                
+                <button
+                  onClick={() => saveApiKey(apiKey)}
+                  className="w-full bg-white text-black font-medium py-3 rounded-xl hover:bg-gray-200 transition-colors active:scale-[0.98]"
+                >
+                  Save Key
+                </button>
+
+                <a 
+                  href="https://aistudio.google.com/app/apikey" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors py-2"
+                >
+                  <span>Get a free key from Google AI Studio</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
