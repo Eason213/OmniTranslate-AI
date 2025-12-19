@@ -8,7 +8,7 @@ interface UseLiveTranslatorProps {
   langA: Language;
   langB: Language;
   autoPlay: boolean;
-  apiKey: string; // New prop for dynamic API Key
+  apiKey: string;
   onAudioLevelChange?: (level: number) => void;
 }
 
@@ -17,42 +17,30 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
   const [transcripts, setTranscripts] = useState<TranscriptItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Refs for audio handling to avoid re-renders
   const inputAudioContextRef = useRef<AudioContext | null>(null);
   const outputAudioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const sessionRef = useRef<any>(null); // To hold the active session
+  const sessionRef = useRef<any>(null);
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const isAiSpeakingRef = useRef<boolean>(false); // Flag to track if AI is currently outputting audio
+  const isAiSpeakingRef = useRef<boolean>(false);
   
-  // Keep autoPlay current in callbacks without reconnecting
   const autoPlayRef = useRef(autoPlay);
   useEffect(() => {
     autoPlayRef.current = autoPlay;
   }, [autoPlay]);
 
-  // Transcriptions buffering
   const currentInputTransRef = useRef<string>('');
   const currentOutputTransRef = useRef<string>('');
 
   const disconnect = useCallback(() => {
-    // Close session
-    if (sessionRef.current) {
-      // The SDK doesn't expose a direct close method on the session object easily in all versions,
-      // but usually closing the underlying websocket or stopping processing is enough.
-      // We'll rely on stopping the audio processing to "stop" the interaction effectively.
-    }
-    
-    // Stop Microphone
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
       mediaStreamRef.current = null;
     }
 
-    // Stop Input Processing
     if (scriptProcessorRef.current) {
       scriptProcessorRef.current.disconnect();
       scriptProcessorRef.current = null;
@@ -66,7 +54,6 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
       inputAudioContextRef.current = null;
     }
 
-    // Stop Output Processing
     activeSourcesRef.current.forEach(source => source.stop());
     activeSourcesRef.current.clear();
     isAiSpeakingRef.current = false;
@@ -81,11 +68,10 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
   }, []);
 
   const connect = useCallback(async () => {
-    // Priority: Prop Key -> Env Key
     const keyToUse = apiKey || (process.env.API_KEY as string);
 
     if (!keyToUse) {
-      setError("API Key is missing. Please click the Key icon to set it.");
+      setError("API Key is missing. Please check your settings.");
       return;
     }
 
@@ -94,7 +80,6 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
       setError(null);
       isAiSpeakingRef.current = false;
 
-      // Initialize Audio Contexts
       const InputContextClass = (window.AudioContext || (window as any).webkitAudioContext);
       const inputCtx = new InputContextClass({ sampleRate: AUDIO_SAMPLE_RATE_INPUT });
       inputAudioContextRef.current = inputCtx;
@@ -105,7 +90,6 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
       const outputNode = outputCtx.createGain();
       outputNode.connect(outputCtx.destination);
 
-      // Get Microphone Access
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: { 
           echoCancellation: true,
@@ -118,29 +102,20 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
       const ai = new GoogleGenAI({ apiKey: keyToUse });
       
       const systemInstruction = `
-        You are a professional, high-end simultaneous interpreter strictly translating between ${langA.name} and ${langB.name}.
-        
-        CRITICAL RULES:
-        1. [TRANSLATION ONLY] 
-           - If you hear ${langA.name}, translate it immediately to ${langB.name}.
-           - If you hear ${langB.name}, translate it immediately to ${langA.name}.
-           - DO NOT act as a chatbot. DO NOT answer questions. ONLY TRANSLATE.
-        
-        2. [LANGUAGE FILTERING]
-           - IGNORE any speech that is NOT in ${langA.name} or ${langB.name}.
-           - If the audio is background noise, music, or unintelligible, OUTPUT NOTHING (Silence).
-           - STRICTLY do not output text/audio for languages other than ${langA.name} and ${langB.name}.
+        You are an elite SIMULTANEOUS INTERPRETER designed for real-time translation earphones. 
+        Current Task: Bidirectional translation between ${langA.name} and ${langB.name}.
 
-        3. [TIMING & COMPLETENESS]
-           - WAIT for the speaker to finish a complete sentence or thought before translating.
-           - Do NOT interrupt mid-sentence. If the speaker pauses for breath or thinking, WAIT.
-           - Only output the translation when the input is semantically complete.
-           - If the input is cut off or fragmentary, wait for more audio context.
-           - It is better to be slightly slower and correct than fast and incomplete.
+        MODE: SIMULTANEOUS (Real-time Earphone)
+        - Start translating IMMEDIATELY once you have enough context for a coherent phrase.
+        - DO NOT wait for long pauses. DO NOT wait for the end of a long sentence.
+        - Emulate the "Earphone mode" where the listener hears the translation almost instantly as the speaker talks.
+        - Translate in small, accurate, and fluid chunks.
 
-        4. [STYLE & FORMAT]
-           - Maintain a natural, conversational tone.
-           - For Traditional Chinese, use Taiwan vocabulary (繁體中文-臺灣).
+        RULES:
+        1. [NO CONVERSATION] You are a machine. Never speak to the user. ONLY output the translation.
+        2. [AUTO-DETECTION] Detect which language is being spoken and translate to the other.
+        3. [CLEAN OUTPUT] Ignore background noise or speech in other languages.
+        4. [TAIWAN TRADITIONAL] For Chinese translations, use Taiwan vocabulary and Traditional characters.
       `;
 
       const sessionPromise = ai.live.connect({
@@ -149,16 +124,15 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
           responseModalities: [Modality.AUDIO],
           systemInstruction: systemInstruction,
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } } // Fenrir is usually deep/calm
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Fenrir' } }
           },
-          inputAudioTranscription: {}, // Helper for transcription
+          inputAudioTranscription: {},
           outputAudioTranscription: {}
         },
         callbacks: {
           onopen: () => {
             setConnectionState(ConnectionState.CONNECTED);
             
-            // Setup Input Stream Processing
             const source = inputCtx.createMediaStreamSource(stream);
             sourceNodeRef.current = source;
             
@@ -166,15 +140,10 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
             scriptProcessorRef.current = scriptProcessor;
 
             scriptProcessor.onaudioprocess = (e) => {
-              // PREVENT ECHO: Stop sending input if AI is speaking
-              if (isAiSpeakingRef.current) {
-                if (onAudioLevelChange) onAudioLevelChange(0);
-                return;
-              }
-
+              // We keep recording even if AI is speaking to allow true simultaneous feel,
+              // but we rely on browser echo cancellation.
               const inputData = e.inputBuffer.getChannelData(0);
               
-              // Audio Level Visualization
               if (onAudioLevelChange) {
                 let sum = 0;
                 for (let i = 0; i < inputData.length; i++) {
@@ -196,12 +165,11 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
           onmessage: async (msg: LiveServerMessage) => {
             const { serverContent } = msg;
 
-            // Handle Transcriptions
+            // Handle Transcriptions for Display
             if (serverContent?.inputTranscription) {
               const text = serverContent.inputTranscription.text;
               if (text) {
                 currentInputTransRef.current += text;
-                // Update specific item in state or create new one
                 updateLastTranscript(currentInputTransRef.current, true, false);
               }
             }
@@ -215,7 +183,6 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
             }
 
             if (serverContent?.turnComplete) {
-              // Finalize the current items
               if (currentInputTransRef.current.trim()) {
                  updateLastTranscript(currentInputTransRef.current, true, true);
                  currentInputTransRef.current = '';
@@ -226,51 +193,40 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
               }
             }
 
-            // Handle Audio Output
+            // Handle Audio Playback
             const audioData = serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (audioData && outputAudioContextRef.current) {
+            if (audioData && outputAudioContextRef.current && autoPlayRef.current) {
+              const ctx = outputAudioContextRef.current;
+              nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
+
+              const audioBytes = base64ToUint8Array(audioData);
+              const audioBuffer = await decodeAudioData(audioBytes, ctx, AUDIO_SAMPLE_RATE_OUTPUT);
               
-              // ONLY Play if autoPlay is true
-              if (autoPlayRef.current) {
-                const ctx = outputAudioContextRef.current;
-                // Ensure nextStartTime is valid
-                nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
+              const source = ctx.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(outputNode);
+              
+              source.addEventListener('ended', () => {
+                activeSourcesRef.current.delete(source);
+                if (activeSourcesRef.current.size === 0) {
+                   isAiSpeakingRef.current = false;
+                }
+              });
 
-                const audioBytes = base64ToUint8Array(audioData);
-                const audioBuffer = await decodeAudioData(audioBytes, ctx, AUDIO_SAMPLE_RATE_OUTPUT);
-                
-                const source = ctx.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(outputNode);
-                
-                source.addEventListener('ended', () => {
-                  activeSourcesRef.current.delete(source);
-                  // If no more sources are playing, we can resume listening
-                  if (activeSourcesRef.current.size === 0) {
-                     // IMPORTANT: Add a small buffer delay to allow room echo to die down
-                     // before enabling the microphone again.
-                     setTimeout(() => {
-                        isAiSpeakingRef.current = false;
-                     }, 400); 
-                  }
-                });
-
-                // Set flag to true to pause microphone input
-                isAiSpeakingRef.current = true;
-                
-                source.start(nextStartTimeRef.current);
-                activeSourcesRef.current.add(source);
-                nextStartTimeRef.current += audioBuffer.duration;
-              }
+              isAiSpeakingRef.current = true;
+              source.start(nextStartTimeRef.current);
+              activeSourcesRef.current.add(source);
+              nextStartTimeRef.current += audioBuffer.duration;
             }
           },
           onclose: () => {
             setConnectionState(ConnectionState.DISCONNECTED);
+            disconnect();
           },
           onerror: (err) => {
             console.error(err);
             setConnectionState(ConnectionState.ERROR);
-            setError("Connection Error");
+            setError("Connection disrupted.");
           }
         }
       });
@@ -280,18 +236,14 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
     } catch (err: any) {
       console.error(err);
       setConnectionState(ConnectionState.ERROR);
-      setError(err.message || "Failed to connect");
+      setError(err.message || "Failed to establish connection.");
       disconnect();
     }
-  }, [langA, langB, apiKey, disconnect, onAudioLevelChange]); // Note: autoPlay is not a dependency here, handled via ref
+  }, [langA, langB, apiKey, disconnect, onAudioLevelChange]);
 
-  // Helper to update transcript state intelligently
   const updateLastTranscript = (text: string, isUser: boolean, isFinal: boolean) => {
     setTranscripts(prev => {
-      // Find the last item that matches the type (isUser) and is not final
       let indexToUpdate = -1;
-      
-      // Search backwards for an active (non-final) item of the same speaker
       for (let i = prev.length - 1; i >= 0; i--) {
         const item = prev[i];
         if (item.isUser === isUser && !item.isFinal) {
@@ -300,18 +252,12 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
         }
       }
 
-      // If found, update it
       if (indexToUpdate !== -1) {
         const updatedItems = [...prev];
-        updatedItems[indexToUpdate] = {
-           ...updatedItems[indexToUpdate],
-           text,
-           isFinal
-        };
+        updatedItems[indexToUpdate] = { ...updatedItems[indexToUpdate], text, isFinal };
         return updatedItems;
       }
       
-      // Otherwise add a new item, but only if there is text
       if (text.trim()) {
         return [...prev, {
           id: Date.now().toString() + Math.random().toString(),
@@ -321,16 +267,9 @@ export const useLiveTranslator = ({ langA, langB, autoPlay, apiKey, onAudioLevel
           timestamp: Date.now()
         }];
       }
-      
       return prev;
     });
   };
 
-  return {
-    connectionState,
-    transcripts,
-    error,
-    connect,
-    disconnect
-  };
+  return { connectionState, transcripts, error, connect, disconnect };
 };
